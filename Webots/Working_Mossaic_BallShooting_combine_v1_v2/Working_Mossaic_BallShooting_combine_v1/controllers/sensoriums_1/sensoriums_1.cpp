@@ -4,6 +4,7 @@
 // Author:
 // Modifications:
 #include <string>
+#include<iostream>
 #include <vector>
 #include <math.h>
 #include <webots/Robot.hpp>
@@ -16,7 +17,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui.hpp>
-#define MAX_SPEED 7
+#define MAX_SPEED 4
+#define MAX_SPEED_MAZE 9
+#define MAX_SPEED_line_follow 4
 
 using namespace webots;
 using namespace std;
@@ -41,6 +44,13 @@ void PID(float error_array[3], int case_select);
 void decidePath(char given_color);
 void FollowBlueLine();
 void FollowRedLine();
+void Line_follow();
+void Line_follow_subtask_1();
+void maze_solving_sub_task();
+int move_forward_for_sometime(int count);
+void turnRobot(float angle);
+int r3ki3gBiasSign=1;
+int turnInProcess = 0;
 
 
 char motorNames[2][15] = {"leftMotor", "rightMotor"};
@@ -183,13 +193,13 @@ int main(int argc, char **argv)
 
     
     turnArm(150);
-    mossaicAreaFunction();
-    // cout << "Yasirus' function is over!!!!!!!!!!!!!!!" << endl;
-    //slide(false,true);
-    Line_following_before_ball_shooting();
-
-    decidePath(given_color);
-    shoot();
+    // Line_follow_subtask_1();
+    std::cout << "line follow ened" << endl;
+    maze_solving_sub_task();
+    // mossaicAreaFunction();
+    // Line_following_before_ball_shooting();
+    // decidePath(given_color);
+    // shoot();
     
     //FollowColorPath(given_color);
 
@@ -1977,4 +1987,320 @@ void FollowRedLine(){
 
 }
 turnRobot(20);
+}
+
+
+void maze_solving_sub_task()
+{
+
+//initaializing all the distance sensors
+  double max_distance_reading = 4000*10;//r3ki3g problametic
+  double perfect_front_gap_for_turning = 60;
+  int forwardAmountBeforeATurn = 55; //::changes due to momentum=>(MAX_SPEED_MAZE,thisValues) = (8,65) ,(9,60) (10,50);
+  
+
+
+  bool isMazeSolvingOver=0;
+  while (robot->step(timeStep) != -1 && !isMazeSolvingOver) {
+
+
+    double front_distance_reading  = front_distance_sensor->getValue();
+
+    // double right_distance_reading =  right_distance_sensor->getValue();
+    // double left_distance_reading = left_distance_sensor->getValue();
+
+    double right_distance_reading = left_distance_sensor->getValue();
+    double left_distance_reading = right_distance_sensor->getValue();
+
+    double front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
+    double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+    double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+
+    bool wall_in_left = left_distance < 290;
+    bool wall_in_right = right_distance < 290;
+    bool wall_in_front = front_distance < 100;
+    
+
+
+   
+   
+   if (!wall_in_left)
+   {
+     if (!turnInProcess)
+     {turnInProcess =1;
+          std::cout << "turn left"<<endl;
+         //go for perfect front distance
+          
+         move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
+         std::cout << "mffst ended"<<endl;
+          turnRobot(90);
+          move_forward_for_sometime(25*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25
+     }
+
+   }
+
+   else if (!wall_in_front)
+   {
+     if (!turnInProcess)
+     {
+     //leftWallDistancesForbearingCorrection
+     std::cout << "go straight + see if needed to correct the bearing"<<endl;
+     move_forward_for_sometime(8);//10 is the best:r3ki3g::10-->5
+     }
+   }
+
+   else if (!wall_in_right)
+   {
+   
+        if (!turnInProcess)
+       {turnInProcess =1;
+       std::cout << "turn right"<<endl;
+       //move_forward_until_perfect_front_distance_for_turning();*******do it here tooo
+       move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
+       turnRobot(-90);
+       move_forward_for_sometime(25*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25
+       }
+   }
+   else
+   {
+        if (!turnInProcess)
+         {turnInProcess =1;
+         std::cout << "turn 180 !"<<endl;
+        
+         
+         //making sure has enough space in left side for turning
+         //std::cout << "before 180 turn: left: " << left_distance << " right: " << right_distance << endl;
+         
+        
+         
+         if (left_distance >right_distance)
+         { // there are more space in left -- so rotate left - wise
+         turnRobot(180);
+         }
+         else
+         {
+         //robot is in middle or more space in right side -- so rotate right- wise
+         turnRobot(-180);
+         }
+          r3ki3gBiasSign*=-1;
+          move_forward_for_sometime(30*4/MAX_SPEED_MAZE);
+          //r3ki3gBiasSign*=-1;
+         }
+   }
+     // Enter here exit cleanup code.
+     
+
+
+  }
+  
+  //code after maze is solved
+  //r3ki3g_start_mozaic_area_subtast();
+}
+
+
+void Line_follow_subtask_1(){
+    while (robot->step(timeStep) != -1) {
+    
+    double max_distance_reading = 4000;
+    DistanceSensor *left_distance_sensor = robot->getDistanceSensor("ds_l");
+    left_distance_sensor->enable(timeStep);
+    DistanceSensor *right_distance_sensor = robot->getDistanceSensor("ds_r");
+    right_distance_sensor->enable(timeStep);
+    
+    double right_distance_reading =  right_distance_sensor->getValue();
+    double left_distance_reading = left_distance_sensor->getValue();
+    
+    double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+    double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+            
+    
+    if (right_distance < 300 && left_distance < 300)
+    {
+    //wall detedted -->  end line following sub task
+    break;
+    }
+    Line_follow();
+    }
+}
+
+void Line_follow()
+{
+  //Line follow sensor values
+  double line_sensor_array[8];
+  for (int i=0;i<8;i++)
+  {
+    line_sensor_array[i]=  Line_folow_distance_sensor[i]->getValue();
+  }
+
+
+  //creating weighted, line follow array and calculating error (avarage)
+  float weighted_array[8];        // [past error, present error]
+  float sum =0;                   // to get the average (for error)
+  int detected_lf_sensor_count =0;             // number sensors above line (to get the average) 
+  line_follow_error_array[0]=line_follow_error_array[1];  
+  for (int i=0; i<8; i++)
+  {
+    if (line_sensor_array[i]>900)  // sensor is not above the line
+    { weighted_array[i]=0; }
+    else                          // sensor is above the line
+    { weighted_array[i]=i-3.5;      // weights---> [-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5]
+      sum = sum + (weighted_array[i]);
+      detected_lf_sensor_count = detected_lf_sensor_count + 1;
+    }
+  }
+  if (detected_lf_sensor_count >0){
+  line_follow_error_array[1] = sum/detected_lf_sensor_count;}
+  else{
+  line_follow_error_array[1] =0;}
+  line_follow_error_array[2] = line_follow_error_array[2] + line_follow_error_array[1]; //updating the error summation
+
+  PID(line_follow_error_array,0);
+  
+  //go afer PID
+  float speed =1;
+  if (controller_speed>0)
+  {
+    motors[0] -> setVelocity(speed * MAX_SPEED_line_follow + controller_speed);
+    motors[1] -> setVelocity(speed * MAX_SPEED_line_follow - 2*controller_speed); 
+  }
+  else{
+    motors[0] -> setVelocity(speed * MAX_SPEED_line_follow + 2*controller_speed);
+    motors[1] -> setVelocity(speed * MAX_SPEED_line_follow - controller_speed); 
+  }
+}
+
+int move_forward_for_sometime(int count) // ***********/////////////*
+{   
+    //stepsForBearingCorrection = 0;//start the session of supervising the wall distances
+    double max_distance_reading = 4000*2;//*******r3ki3g
+    
+      int iter = 0;
+      bool tooClose = 0;//too close to a front wall?
+      while (robot->step(timeStep) != -1 && iter <count && !tooClose)
+      {
+        double front_distance_reading  = front_distance_sensor->getValue();
+        double right_distance_reading =  right_distance_sensor->getValue();
+        double left_distance_reading = left_distance_sensor->getValue();
+        
+        double front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
+        double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+        double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+        
+        
+        double speedRight = 1;
+        double speedLeft = 1;
+        
+        
+        /*//save wall positions to bearing correction
+        if (iter < 10)
+        {
+          
+          ///save as blocks of ten
+          leftWallDistancesForbearingCorrection[stepsForBearingCorrection] = left_distance;
+          rightWallDistancesForbearingCorrection[stepsForBearingCorrection] = right_distance;
+          stepsForBearingCorrection++;
+          
+          
+          //save last 10
+          for(int i=0;i<10-1;i++)
+          {
+          
+          leftWallDistancesForbearingCorrection[i] = leftWallDistancesForbearingCorrection[i+1];
+          rightWallDistancesForbearingCorrection[i]=rightWallDistancesForbearingCorrection[i+1];
+          
+          
+          }
+          leftWallDistancesForbearingCorrection[9] = left_distance;
+          rightWallDistancesForbearingCorrection[9] = right_distance;
+          
+          //calculate the difference array too
+          for(int i=0;i<10-1;i++)
+          {
+          
+          leftWallDistanceDifferenceForbearingCorrection[i] = leftWallDistancesForbearingCorrection[i+1]-leftWallDistancesForbearingCorrection[i];
+          rightWallDistanceDifferenceForbearingCorrection[i] = rightWallDistancesForbearingCorrection[i+1]-rightWallDistancesForbearingCorrection[i];
+          
+          }
+      //output for see how sensor data vary
+          //pure value array
+          std::cout << "pure values " ;
+          for(int uter = 0;uter<10;uter++)
+          {
+            std::cout << leftWallDistancesForbearingCorrection[uter] << " " ;
+          }
+          std::cout << std::endl;
+          for(int uter = 0;uter<10;uter++)
+          {
+            std::cout << rightWallDistancesForbearingCorrection[uter] << " " ;
+          }
+          std::cout << std::endl;
+          //difference array
+          std::cout << " Difference : ";
+          for(int uter = 0;uter<9;uter++)
+          {
+            std::cout << leftWallDistanceDifferenceForbearingCorrection[uter] << " " ;
+          }
+          std::cout << std::endl;
+          for(int uter = 0;uter<9;uter++)
+          {
+            std::cout << rightWallDistanceDifferenceForbearingCorrection[uter] << " " ;
+          }
+          std::cout << std::endl;
+          //end output for see how sensor data vary
+          
+          //end- bearing correction - test code
+          
+        }
+        /*
+        if left wall is near -- calculate using left wall
+        otherwise right wall            
+        */
+        
+        
+        double avgDeviationOfRobotRespectToCenterLine;//(+)=> robot is in right side
+        if (left_distance < 300)
+        {
+        //left wall is good to calculate the deviation from the center line
+        avgDeviationOfRobotRespectToCenterLine = left_distance-142;
+        }
+        else if (right_distance < 300)
+        {
+        //right wall is good to calculate the deviation from the center line
+        avgDeviationOfRobotRespectToCenterLine = 142- right_distance;
+        }
+        
+        avgDeviationOfRobotRespectToCenterLine+=20*r3ki3gBiasSign;//r3ki3g::ading a bias
+        if (avgDeviationOfRobotRespectToCenterLine > 0) 
+        {
+        speedRight = 1;
+        speedLeft = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*5);
+        }
+        if (avgDeviationOfRobotRespectToCenterLine < 0) 
+        {
+        speedLeft = 1;
+        speedRight = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*abs(avgDeviationOfRobotRespectToCenterLine)*5);
+        }
+
+        
+        //critical if robot front going to hit a wall:r3ki3g:29->50 for testing
+        if (left_distance < 20+50)
+        {
+          speedRight = 0;
+        }
+        if (right_distance < 20+50)
+        {
+          speedLeft = 0;
+        }
+        
+        //tooClose : is the obot going to hit a wall infront of it?
+        tooClose = front_distance < 20+80;//r3ki3g:90-->100-->80 for testing:results seems nicer
+        std::cout << "close - front ? " << front_distance << endl;
+          
+        
+        motors[0] -> setVelocity(speedLeft * MAX_SPEED_MAZE);  //left
+        motors[1] -> setVelocity(speedRight * MAX_SPEED_MAZE);  //right
+        iter++; 
+      }
+      return 0;
+
 }
