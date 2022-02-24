@@ -1496,8 +1496,6 @@ void slide(bool reverse, bool ball)
 
 void shoot(){
 
- // actMot->setVelocity(0.01);
-
   turnArm(-150);
   slide(false,false);
   const float END_POS = 0.08;
@@ -1540,7 +1538,9 @@ void shoot(){
   }
   cout << "Loop Broke" << endl;
   actMot -> setPosition(0);
+  turnArm(150);
 }
+
 
 void Line_following_before_ball_shooting()
 {
@@ -1723,7 +1723,7 @@ void FollowBlueLine(){
 
 }
 
-turnRobot(-16);
+turnRobot(-15);
 }
 
 void FollowRedLine(){
@@ -1796,7 +1796,7 @@ void FollowRedLine(){
   }
 
 }
-turnRobot(20);
+turnRobot(18);
 }
 
 void Line_follow_subtask_1(){
