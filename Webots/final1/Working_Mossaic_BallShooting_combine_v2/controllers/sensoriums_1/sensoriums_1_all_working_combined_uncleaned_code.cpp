@@ -713,6 +713,8 @@ bool IdentifyPurpleMat(){
   vector<vector<cv::Point>> conPoly(contours.size());
   vector<cv::Rect> boundRect(contours.size());
 
+  int objectIdentity {};  // 0 for cylinder 1 for box
+
   for (long long unsigned int i = 0; i < contours.size(); i++)
   {
     int area = cv::contourArea(contours[i]);
@@ -724,6 +726,7 @@ bool IdentifyPurpleMat(){
       float peri = cv::arcLength(contours[i], true);
       cv::approxPolyDP(contours[i], conPoly[i], 0.02 * peri, true);
       boundRect[i] = cv::boundingRect(conPoly[i]);
+      int objCor = (int)conPoly[i].size();
       
       cv::drawContours(res, conPoly, i, cv::Scalar(255, 255, 255), 2);
       cv::rectangle(res, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(255, 0, 0), 3);
@@ -1162,7 +1165,7 @@ void placeInHole(int objectID){
       // if(abs(reigionData[5] - 320 ) <  abs( reigionData[0] - 320 )) objectShifter = 5;
       vector<int> tempReig {};
 
-      for(size_t i = 0; i < reigionData.size() / 5; ++i){
+      for(int i = 0; i < reigionData.size() / 5; ++i){
         if( abs(reigionData[5*i] - 320) < 160){
           if(reigionData[5*i + 3] == objectID) tempReig.push_back(i);
         }
@@ -1533,8 +1536,155 @@ void shoot(){
   actMot -> setPosition(0);
 }
 
+void decide(char colour_path){
+  char condition = 'g';
+  
+
+  double prev_max = 0;
+  while (robot->step(timeStep) != -1){
+
+  if (condition=='t'){
+    break;
+  }
+  
+  int im_width = camera->getWidth();
+  int im_height = camera->getHeight();
+  const unsigned char* img;
+  
+  cv::Mat img1 = cv::Mat(cv::Size(im_height, im_width), CV_8UC4);
+  img = camera->getImage();
+    
+  if(img) {
+      
+      img1.data = (uchar *)img;   //get image
+      cv::Mat hsv_image,mask, filtered, filtered_RGB, lower_mask, upper_mask,gray_output;
+
+      if (colour_path == 'w'){
+      cout << "white" << endl;
+      int low_h = 0, low_s = 0, low_v = 20;
+	    int high_h = 255, high_s = 50, high_v = 255;   //filter for white
+      cv::cvtColor(img1,hsv_image , cv::COLOR_BGR2HSV);
+      cv::inRange(hsv_image, cv::Scalar(low_h, low_s, low_v), cv::Scalar(high_h, high_s, high_v),mask);
+      cv::bitwise_and(hsv_image, hsv_image,filtered,mask = mask);
+	    cv::cvtColor(filtered, filtered_RGB, cv::COLOR_HSV2RGB);}
+
+      else if(colour_path=='b'){
+       
+      int low_h = 110, low_s = 150, low_v = 20;
+	    int high_h = 130, high_s = 250, high_v = 255;   //filter for white
+      cv::cvtColor(img1,hsv_image , cv::COLOR_BGR2HSV);
+      cv::inRange(hsv_image, cv::Scalar(low_h, low_s, low_v), cv::Scalar(high_h, high_s, high_v),mask);
+      cv::bitwise_and(hsv_image, hsv_image,filtered,mask = mask);
+	    cv::cvtColor(filtered, filtered_RGB, cv::COLOR_HSV2RGB);
+      }
+
+      else if(colour_path=='r'){    
+        cv::cvtColor(img1,hsv_image , cv::COLOR_BGR2HSV);
+        int low_h_r = 0, low_s_r = 100, low_v_r = 20;
+	      int high_h_r = 10, high_s_r = 255, high_v_r = 255;
+        inRange(hsv_image, cv::Scalar(low_h_r, low_s_r, low_v_r), cv::Scalar(high_h_r, high_s_r, high_v_r), lower_mask);
+        
+        low_h_r = 160, low_s_r = 100, low_v_r = 20;
+        high_h_r = 179, high_s_r = 255, high_v_r = 255;
+        inRange(hsv_image, cv::Scalar(low_h_r, low_s_r, low_v_r), cv::Scalar(high_h_r, high_s_r, high_v_r), upper_mask);
+        
+        mask = lower_mask + upper_mask;
+
+        cv::bitwise_and(hsv_image, hsv_image,filtered,mask = mask);
+	      cv::cvtColor(filtered, filtered_RGB, cv::COLOR_HSV2RGB);
+      }
+
+      cvtColor(filtered_RGB, gray_output, cv::COLOR_RGB2GRAY);  //get gray image
+
+
+      int no_rows = gray_output.rows;
+      int no_columns = gray_output.cols;
+      cv::Mat bottom_part = gray_output(cv::Range(no_rows/2+200, no_rows), cv::Range(0, no_columns));
+      
+      
+      double nonzero = cv::countNonZero(bottom_part);
+      double total = bottom_part.total() ;
+
+      double minval;
+      double maxval;
+      cv::Point minloc;
+      cv::Point maxloc;
+      cv::minMaxLoc(bottom_part, &minval, &maxval, &minloc, &maxloc);
+
+      char condi = 'f';
+
+      if (prev_max <= maxval){
+        prev_max = maxval;
+      }
+      else {
+        condi = 't';
+      }
+
+      cv::Point org(11, 50);
+      string s = to_string(maxval);
+      cv::putText(filtered_RGB, s, org,cv::FONT_HERSHEY_SCRIPT_SIMPLEX,1, cv::Scalar(255, 255 , 255), 2, cv::LINE_AA);
+      
+      ImageRef *ir = display->imageNew(im_width,im_height,img1.data,Display::RGBA);
+      
+      if (condi=='t'){
+        condition = 't';
+        if (colour_path == 'w'){
+                
+                if (given_color=='r'){
+                      // robot->step(2250);
+                      motors[0]-> setVelocity(0);
+                      motors[1]-> setVelocity(0);
+                      robot -> step (1000);
+                      moveForward(0.5,7.5);
+                      turnRobot(-90);
+                      robot -> step (1000);
+                      motors[0]-> setVelocity(MAX_SPEED);
+                      motors[1]-> setVelocity(MAX_SPEED);
+                      moveForward(1,11.7);
+                      motors[0]-> setVelocity(0);
+                      motors[1]-> setVelocity(0);
+                      robot -> step(1000);
+                      turnRobot(45);
+                      robot -> step(1000);
+                }
+                else if (given_color=='b'){
+                      
+                      motors[0]-> setVelocity(0);
+                      motors[1]-> setVelocity(0);
+                      robot->step(1000);
+                      moveForward(0.5,7.5);
+                      robot -> step (500);
+                      motors[0]-> setVelocity(MAX_SPEED);
+                      motors[1]-> setVelocity(MAX_SPEED);
+                      moveForward(1,11.7);
+                      motors[0]-> setVelocity(0);
+                      motors[1]-> setVelocity(0);
+                      robot -> step(1000);
+                      turnRobot(-45);
+                      robot -> step(1000);
+                }
+        }
+        else{
+          motors[0]-> setVelocity(0);
+          motors[1]-> setVelocity(0);
+        }
+      }
+  
+      display->imagePaste(ir,0,0,false);
+      display->imageDelete(ir);
+    }
+   }
+   cout << "chamith" << endl;
+}
+
 void Line_following_before_ball_shooting()
 {
+  int hmin = 115, smin = 100, vmin = 20;
+  int hmax = 125, smax = 255, vmax = 255;
+
+  const unsigned char *cam_feed;
+  int im_height = 640;
+  int im_width = 640;
 
   int counter = 0;
 
@@ -1582,6 +1732,7 @@ void Line_following_before_ball_shooting()
     motors[1] -> setVelocity(speed * MAX_SPEED - controller_speed); 
   }
 
+  //std::cout <<"array"<<endl;
   int count = 0;
   float thresh = 500;
   for (int i = 0; i <8 ; i++) 
@@ -1590,7 +1741,17 @@ void Line_following_before_ball_shooting()
     if(line_sensor_array[i] > thresh){
       count += 1;
     }
+    //std::cout << i<< "  " << line_sensor_array[i];
+    //std::cout << line_sensor_array[i]<<endl;
   }
+
+
+  // if (count ==8){
+  //   motors[0] -> setVelocity(0);
+  //   motors[1] -> setVelocity(0); 
+  //   //moveForward(1,3.5);
+  //   break;
+  // }
 
   bool status = true;
 
@@ -1607,7 +1768,109 @@ void Line_following_before_ball_shooting()
     moveForward(0);
     break;
   }
+
+  // for(int i = 0; i < 8;i++){
+
+  //   cout << line_sensor_array[i]<<" ";
+    
+  // }
+  // cout << endl;
+
+
+
+  // if(status && line_sensor_array[1] >9000 ){
+  //   cout << "ghdghsdfgh"<<endl;
+  //   moveForward(0);
+  //   break;
+  // }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//   cv::Mat cvImage = cv::Mat(cv::Size(im_height, im_width), CV_8UC4);
+//   cv::Mat imgCopy;
+//   cv::Mat imgGray, imgBlur, imgDil;
+//   cv::Mat imgCanny;
+//   cv::Mat imgHsv, mask, res;
+//   vector<vector<cv::Point>> contours;
+//   vector<cv::Vec4i> hierarchy;
+//   cam_feed = camera->getImage();
+
+//   if (cam_feed){
+
+//   cvImage.data = (uchar *)cam_feed;
+//   cv::cvtColor(cvImage, imgHsv, cv::COLOR_BGR2HSV);
+//   cv::Scalar lowerLim(hmin, smin, vmin);
+//   cv::Scalar upperLim(hmax, smax, vmax);
+//   cv::inRange(imgHsv, lowerLim, upperLim, mask);
+//   cv::bitwise_and(cvImage, cvImage, res, mask = mask);
+//   cv::cvtColor(res, imgGray, cv::COLOR_BGR2GRAY);
+//   cv::GaussianBlur(imgGray, imgBlur, cv::Size(3, 3), 3, 0);
+//   cv::Canny(imgBlur, imgCanny, 25, 75);
+//   cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+//   // cv::erode(imgCanny, imgCanny, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
+//   cv::dilate(imgCanny, imgDil, kernel);
+//   cv::findContours(imgDil, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+//   vector<vector<cv::Point>> conPoly(contours.size());
+//   vector<cv::Rect> boundRect(contours.size());
+
+//   for (long long unsigned int i = 0; i < contours.size(); i++)
+//   {
+//     int area = cv::contourArea(contours[i]);
+//     string objectType;
+
+//     if (area > 500)
+//     {
+//       float peri = cv::arcLength(contours[i], true);
+//       cv::approxPolyDP(contours[i], conPoly[i], 0.02 * peri, true);
+//       boundRect[i] = cv::boundingRect(conPoly[i]);
+//       int objCor = (int)conPoly[i].size();
+
+
+//       if (objCor <= 7)
+//       {
+//         objectType = "BOX";
+//       }
+//       else if (objCor > 7)
+//       {
+//         objectType = "CYLY";
+//       }
+
+//       // cv::drawContours(res, conPoly, i, cv::Scalar(255, 255, 255), 2);
+//       // cv::rectangle(res, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(255, 0, 0), 3);
+//       // cv::putText(res, objectType, { boundRect[i].x,boundRect[i].y - 5 }, cv::FONT_HERSHEY_PLAIN,3, cv::Scalar(255, 255, 255),3);
+//       cv::drawContours(res, contours, -1, cv::Scalar(255, 255, 255), 1);
+
+
+//     }
+
+//  //Print sensor values (remove)
+//   }
+
+//   ImageRef *ir = display->imageNew(im_width, im_height, res.data, Display::BGRA);
+//   display->imagePaste(ir, 0, 0, false);
+//   display->imageDelete(ir);
+
+//   if (conPoly.size()>0){
+
+  
+
+//   if (conPoly[0][2].y >= 375 && conPoly[0][3].y >= 375){
+
+
+//     motors[0] -> setVelocity(0);
+//     motors[1] -> setVelocity(0); 
+//     //cout << "Break"<<endl;
+//     //moveForward(1,5.5);
+//     break;
+
+//   }
+
+//   cout <<conPoly[0]<<endl;
+//   }
+//   }
 }
+
+cout << "End of fucking white line following" << endl;
 
 }
 // PID function
@@ -1617,7 +1880,7 @@ void PID(float error_array[3], int case_select)    // error_array= [past error, 
   float I= error_array[2];
   float D= P - error_array[0];
 
-  float const_array[3] {};
+  float const_array[3];
 
   if (case_select==0)       //check for line follow
   {
@@ -1678,7 +1941,7 @@ void FollowBlueLine(){
   PID(line_follow_error_array,0);
   
   //go afer PID
-  float speed =1;
+  float speed =1.4;
   if (controller_speed>0)
   {
     motors[0] -> setVelocity(speed * MAX_SPEED + controller_speed);
@@ -1689,6 +1952,13 @@ void FollowBlueLine(){
     motors[1] -> setVelocity(speed * MAX_SPEED - controller_speed); 
   }
 
+  for(int i = 0; i < 8;i++){
+
+    cout << line_sensor_array[i]<<" ";
+    
+  }
+  cout << endl;
+
   int count = 0;
   float thresh = 970;
   for (int i = 0; i <8 ; i++) 
@@ -1697,6 +1967,8 @@ void FollowBlueLine(){
     if(line_sensor_array[i] > thresh){
       count += 1;
     }
+    //std::cout << i<< "  " << line_sensor_array[i];
+    //std::cout << line_sensor_array[i]<<endl;
   }
   int stopcount = 0;
   for (int i = 0; i<8;i++){
@@ -1751,7 +2023,7 @@ void FollowRedLine(){
   PID(line_follow_error_array,0);
   
   //go afer PID
-  float speed =1;
+  float speed =1.4;
   if (controller_speed>0)
   {
     motors[0] -> setVelocity(speed * MAX_SPEED + controller_speed);
@@ -1762,6 +2034,13 @@ void FollowRedLine(){
     motors[1] -> setVelocity(speed * MAX_SPEED - controller_speed); 
   }
 
+  for(int i = 0; i < 8;i++){
+
+    cout << line_sensor_array[i]<<" ";
+    
+  }
+  cout << endl;
+
   int count = 0;
   float thresh = 500;
   for (int i = 0; i <8 ; i++) 
@@ -1770,6 +2049,8 @@ void FollowRedLine(){
     if(line_sensor_array[i] > thresh){
       count += 1;
     }
+    //std::cout << i<< "  " << line_sensor_array[i];
+    //std::cout << line_sensor_array[i]<<endl;
   }
 
   int stopcount = 0;
@@ -1793,18 +2074,21 @@ turnRobot(20);
 void Line_follow_subtask_1(){
 
     int counter {};
-
-    double right_distance_reading {};
-    double left_distance_reading {};
-
     while (robot->step(timeStep) != -1) {
+      
+      double max_distance_reading = 4000;
 
-      right_distance_reading =  right_distance_sensor->getValue();
-      left_distance_reading = left_distance_sensor->getValue();
+      double right_distance_reading =  right_distance_sensor->getValue();
+      double left_distance_reading = left_distance_sensor->getValue();
+      
+      double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+      double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+              
+      cout << right_distance << ", " << left_distance << endl;
 
       Line_follow();
 
-      if (right_distance_reading< 300 && left_distance_reading < 300)
+      if (right_distance < 300 && left_distance < 300)
       {
         counter ++;
       }else{
@@ -1862,7 +2146,14 @@ void Line_follow()
     motors[0] -> setVelocity(speed * MAX_SPEED_line_follow + 2*controller_speed);
     motors[1] -> setVelocity(speed * MAX_SPEED_line_follow - controller_speed); 
   }
+
+  for (int i = 0; i <8 ; i++) 
+  {
+    std::cout << i<< "  " << line_sensor_array[i];
+    std::cout << line_sensor_array[i]<<endl;
+  }
 }
+
 
 // maze solving
 int moveForwardMaze(float speed){
@@ -1888,85 +2179,69 @@ int move_forward_for_sometime(int count) // *********************************///
     DistanceSensor *right_distance_sensor = robot->getDistanceSensor("ds_r");
     right_distance_sensor->enable(timeStep);
     
-    int iter = 0;
-    bool tooClose = 0;//too close to a front wall?
+          int iter = 0;
+          bool tooClose = 0;//too close to a front wall?
+          while (robot->step(timeStep) != -1 && iter <count && !tooClose)
+          {
+            double front_distance_reading  = front_distance_sensor->getValue();
+            double right_distance_reading =  right_distance_sensor->getValue();
+            double left_distance_reading = left_distance_sensor->getValue();
+            
+            double front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
+            double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+            double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+            
+            
+            double speedRight = 1;
+            double speedLeft = 1;
+            
 
-    double front_distance_reading {};
-    double right_distance_reading {};
-    double left_distance_reading {};
-    
-    double front_distance {};
-    double right_distance {};
-    double left_distance{};
-    
-    
-    double speedRight {};
-    double speedLeft {};
+            
+            double avgDeviationOfRobotRespectToCenterLine;//(+)=> robot is in right side
+            if (left_distance < 300)
+            {
+            //left wall is good to calculate the deviation from the center line
+            avgDeviationOfRobotRespectToCenterLine = left_distance-142;
+            }
+            else if (right_distance < 300)
+            {
+           //right wall is good to calculate the deviation from the center line
+            avgDeviationOfRobotRespectToCenterLine = 142- right_distance;
+            }
+            
+            avgDeviationOfRobotRespectToCenterLine+=20*r3ki3gBiasSign;//r3ki3g::ading a bias
+            if (avgDeviationOfRobotRespectToCenterLine > 0) 
+            {
+            speedRight = 1;
+            speedLeft = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*5);
+            }
+            if (avgDeviationOfRobotRespectToCenterLine < 0) 
+            {
+            speedLeft = 1;
+            speedRight = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*abs(avgDeviationOfRobotRespectToCenterLine)*5);
+            }
 
-    double avgDeviationOfRobotRespectToCenterLine {};//(+)=> robot is in right side
-
-
-    while (robot->step(timeStep) != -1 && iter <count && !tooClose)
-    {
-      front_distance_reading  = front_distance_sensor->getValue();
-      right_distance_reading =  right_distance_sensor->getValue();
-      left_distance_reading = left_distance_sensor->getValue();
-      
-      front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
-      right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
-      left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
-      
-      
-      speedRight = 1;
-      speedLeft = 1;
-      
-
-      
-      
-      if (left_distance < 300)
-      {
-      //left wall is good to calculate the deviation from the center line
-      avgDeviationOfRobotRespectToCenterLine = left_distance-142;
-      }
-      else if (right_distance <= 300)
-      {
-      //right wall is good to calculate the deviation from the center line
-      avgDeviationOfRobotRespectToCenterLine = 142- right_distance;
-      }
-      
-      avgDeviationOfRobotRespectToCenterLine += 20*r3ki3gBiasSign;//r3ki3g::ading a bias
-      if (avgDeviationOfRobotRespectToCenterLine > 0) 
-      {
-      speedRight = 1;
-      speedLeft = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*5);
-      }
-      if (avgDeviationOfRobotRespectToCenterLine < 0) 
-      {
-      speedLeft = 1;
-      speedRight = 1 - min (0.07,avgDeviationOfRobotRespectToCenterLine*avgDeviationOfRobotRespectToCenterLine*abs(avgDeviationOfRobotRespectToCenterLine)*5);
-      }
-
-      
-      //critical if robot front going to hit a wall:r3ki3g:29->50 for testing
-      if (left_distance < 20+50)
-      {
-        speedRight = 0;
-      }
-      if (right_distance < 20+50)
-      {
-        speedLeft = 0;
-      }
-      
-      //tooClose : is the obot going to hit a wall infront of it?
-      tooClose = front_distance < 20+80;//r3ki3g:90-->100-->80 for testing:results seems nicer
-      // std::cout << "close - front ? " << front_distance << endl;
-        
-      
-      motors[0] -> setVelocity(speedLeft * MAX_SPEED_MAZE);  //left
-      motors[1] -> setVelocity(speedRight * MAX_SPEED_MAZE);  //right
-      iter++; 
-    }
-    return 0;
+            
+            //critical if robot front going to hit a wall:r3ki3g:29->50 for testing
+            if (left_distance < 20+50)
+            {
+              speedRight = 0;
+            }
+            if (right_distance < 20+50)
+            {
+              speedLeft = 0;
+            }
+            
+            //tooClose : is the obot going to hit a wall infront of it?
+            tooClose = front_distance < 20+80;//r3ki3g:90-->100-->80 for testing:results seems nicer
+            std::cout << "close - front ? " << front_distance << endl;
+              
+            
+            motors[0] -> setVelocity(speedLeft * MAX_SPEED_MAZE);  //left
+            motors[1] -> setVelocity(speedRight * MAX_SPEED_MAZE);  //right
+            iter++; 
+          }
+          return 0;
 
 }
 
@@ -2013,47 +2288,50 @@ turnInProcess = 0;
 }
 // end of turning
 
+
+
 void maze_solving_sub_task()
 {
 
-  //initaializing all the distance sensors
-  double max_distance_reading = 4000*10;//r3ki3g problametic
+//initaializing all the distance sensors
+    double max_distance_reading = 4000*10;//r3ki3g problametic
+    double perfect_front_gap_for_turning = 60;
+    int forwardAmountBeforeATurn = 140; //::changes due to momentum=>(MAX_SPEED_MAZE,thisValues) = (8,65) ,(9,60) (10,50);
+    DistanceSensor *front_distance_sensor = robot->getDistanceSensor("ds_f");
+    front_distance_sensor->enable(timeStep);
+    DistanceSensor *left_distance_sensor = robot->getDistanceSensor("ds_l");
+    left_distance_sensor->enable(timeStep);
+    DistanceSensor *right_distance_sensor = robot->getDistanceSensor("ds_r");
+    right_distance_sensor->enable(timeStep);
 
-  int forwardAmountBeforeATurn = 140; //::changes due to momentum=>(MAX_SPEED_MAZE,thisValues) = (8,65) ,(9,60) (10,50);
-
+    //Compass
+    //Compass *compassSensor = robot->getCompass("compass");
+    //compassSensor->enable(timeStep);
+    
+      // Initializing the compass - from saliya
+  compass = robot -> getCompass("compass");
+  compass -> enable(timeStep);
 
   bool isMazeSolvingOver=0;
 
   int consecetive_counter {};
 
-  double front_distance_reading {};
-  double right_distance_reading {};
-  double left_distance_reading {};
-
-  double front_distance {};
-  double right_distance {};
-  double left_distance {};
-
-  bool wall_in_left {};
-  bool wall_in_right {};
-  bool wall_in_front {};
-
   while (robot->step(timeStep) != -1 && !isMazeSolvingOver) {
 
 
-    front_distance_reading  = front_distance_sensor->getValue();
-    right_distance_reading =  right_distance_sensor->getValue();
-    left_distance_reading = left_distance_sensor->getValue();
+    double front_distance_reading  = front_distance_sensor->getValue();
+    double right_distance_reading =  right_distance_sensor->getValue();
+    double left_distance_reading = left_distance_sensor->getValue();
 
-    front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
-    right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
-    left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
+    double front_distance = max_distance_reading==front_distance_reading?front_distance:front_distance_reading;
+    double right_distance = max_distance_reading==right_distance_reading?right_distance:right_distance_reading;
+    double left_distance = max_distance_reading==left_distance_reading?left_distance:left_distance_reading;
 
-    wall_in_left = left_distance < 290;
-    wall_in_right = right_distance < 290;
-    wall_in_front = front_distance < 100;
+    bool wall_in_left = left_distance < 290;
+    bool wall_in_right = right_distance < 290;
+    bool wall_in_front = front_distance < 100;
     
- 
+
 
     if(front_distance > 600){
       consecetive_counter ++;
@@ -2063,8 +2341,10 @@ void maze_solving_sub_task()
     }
 
     if (consecetive_counter > 10){
+      std::cout << "Front distance is higher!!!!!";
       if(IdentifyPurpleMat()){
-        std::cout << "\n\tPurple Mat identified, loop is breaking" << endl;
+        std::cout << "Purple Mat identified, loop is breaking";
+        // IdentifyPurpleMat();
         break;
       }
     }
@@ -2074,13 +2354,13 @@ void maze_solving_sub_task()
    {
      if (!turnInProcess)
      {turnInProcess =1;
-        cout << "\tSensobot -> turn left"<<endl;
+          std::cout << "turn left"<<endl;
          //go for perfect front distance
           
-        move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
-        cout << "\tmffst ended"<<endl;
-        turnRobotMaze(90);
-        move_forward_for_sometime(50*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25||| -->30
+         move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
+         std::cout << "mffst ended"<<endl;
+          turnRobotMaze(90);
+          move_forward_for_sometime(50*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25||| -->30
      }
 
    }
@@ -2090,7 +2370,7 @@ void maze_solving_sub_task()
      if (!turnInProcess)
      {
      //leftWallDistancesForbearingCorrection
-     cout << "\tgo straight + see if needed to correct the bearing"<<endl;
+     std::cout << "go straight + see if needed to correct the bearing"<<endl;
      move_forward_for_sometime(8);//10 is the best:r3ki3g::10-->5
      }
    }
@@ -2100,7 +2380,7 @@ void maze_solving_sub_task()
    
         if (!turnInProcess)
        {turnInProcess =1;
-       cout << "\tSensobot -> turn right"<<endl;
+       std::cout << "turn right"<<endl;
        //move_forward_until_perfect_front_distance_for_turning();***************do it here tooo
        move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
        turnRobotMaze(-90);
@@ -2111,8 +2391,14 @@ void maze_solving_sub_task()
    {
         if (!turnInProcess)
          {turnInProcess =1;
-         cout << "\tSensobot -> turn 180 !"<<endl;
-                 
+         std::cout << "turn 180 !"<<endl;
+        
+         
+         //making sure has enough space in left side for turning
+         //std::cout << "before 180 turn: left: " << left_distance << " right: " << right_distance << endl;
+         
+        
+         
          if (left_distance >right_distance)
          { // there are more space in left -- so rotate left - wise
          turnRobotMaze(180);
@@ -2133,7 +2419,7 @@ void maze_solving_sub_task()
 
   }
   
- 
+
 }
 
 
