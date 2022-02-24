@@ -28,7 +28,7 @@ int moveForward(float speed, float distance);
 void turnRobot(float angle);
 vector<vector<int>> locateObjects();
 void PID();
-float getBearing(double x, double z);
+float getBearing(double x, double z, double oldBearing);
 vector<int> getReigion();
 void gotoPurpleMat();
 void mossaicAreaFunction();
@@ -48,8 +48,6 @@ void Line_follow();
 void Line_follow_subtask_1();
 void maze_solving_sub_task();
 int move_forward_for_sometime(int count);
-int moveForwardMaze(float speed);
-void turnRobotMaze(float angle);
 bool IdentifyPurpleMat();
 
 
@@ -192,15 +190,44 @@ int main(int argc, char **argv)
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   while (robot->step(timeStep) != -1)
   {
+    cout << "Sensobot task STARTED" << endl;
+    cout << "=====================" << endl;
+
+    slide(true, false);
     turnArm(150);
     moveForward(1,-1);
+
+    cout << "Line Following activated" << endl;
+    cout << "========================" << endl;
+
     Line_follow_subtask_1();
-    std::cout << "line follow ened" << endl;
+
+    cout << "Maze Solving activated" << endl;
+    cout << "=====================" << endl;
+
     maze_solving_sub_task();
+
+    cout << "Mossaic area subtask activated" << endl;
+    cout << "=====================" << endl;
+
     mossaicAreaFunction();
+
+    cout << "Line Following activated" << endl;
+    cout << "========================" << endl;
+
     Line_following_before_ball_shooting();
+
+    cout << "Path deciding activated" << endl;
+    cout << "========================" << endl;
+
     decidePath(given_color);
+
+    cout << "Ball shooting activated" << endl;
+    cout << "========================" << endl;
+
     shoot();
+
+    cout << "SENSOBOT TASKS FINISHED" << endl;
     
     while (robot->step(timeStep) != -1){
     }
@@ -233,13 +260,13 @@ int moveForward(float speed, float distance = -1)
   return 0;
 } // end of moveForward function
 
-float getBearing(double x, double z)
+float getBearing(double x, double z, double oldBearing)
 {
   // x  --> sin curve
   // z  --> cos curve
 
-  x = compass->getValues()[0];
-  z = compass->getValues()[2];
+  // x = compass->getValues()[0];
+  // z = compass->getValues()[2];
 
   bearing = asin(x) * 57.29577;
 
@@ -257,56 +284,31 @@ float getBearing(double x, double z)
     bearing = 360 + bearing;
   }
 
+  // cout << "Bearing -> " << bearing << ", \t Delta Theta -> " << abs(oldBearing - bearing) << endl;
   return bearing;
 }
 
 void turnRobot(float angle)
 {
-  // reading compass direction
-  double x = compass->getValues()[0];
-  double z = compass->getValues()[2];
+  double m = 25.8732;
+  // double c = -3.4825;
 
-  double start_location = getBearing(x, z);
+  double start_location = psensor -> getValue();
 
-  double end_location = start_location + angle;
-  double diff{};
-  double I{};
+  int direction = int(angle) / abs(int(angle));
+  double delta_pos = abs(angle / m);
 
-  // if (end_location < 0) {end_location += 360; status = true;}
-  // if (end_location > 360) {end_location -= 360; status = true;}
-  if (end_location < 0)
-  {
-    end_location += 360;
-  }
-  if (end_location > 360)
-  {
-    end_location -= 360;
-  }
+  motors[0]->setVelocity(direction * 0.6 * MAX_SPEED);
+  motors[1]->setVelocity(direction * -0.6 * MAX_SPEED);
 
-  motors[0]->setVelocity((angle / abs(angle)) * 0.6 * MAX_SPEED);
-  motors[1]->setVelocity((angle / abs(angle)) * -0.6 * MAX_SPEED);
+  while (robot->step(timeStep) != -1){
 
-  while (robot->step(timeStep) != -1)
-  {
-
-    x = compass->getValues()[0];
-    z = compass->getValues()[2];
-
-    bearing = getBearing(x, z);
-
-    diff = abs(bearing - start_location);
-    if (diff > 2.27198)
-      diff = 2.27198;
-
-    I += diff;
-    if (I > abs(angle))
-    {
-      motors[0]->setVelocity(0);
-      motors[1]->setVelocity(0);
+    if ( abs(start_location - psensor -> getValue()) > delta_pos ){
+      moveForward(0, -1);
       break;
     }
-    start_location = bearing;
-  } // end of while loop
+  }
+
   turnInProcess = 0;
 
 } // end of turning
@@ -847,7 +849,7 @@ void gotoPurpleMat()
 
   //time to save the bearing
   // reading compass direction
-  masterBearing = getBearing(compass->getValues()[0], compass->getValues()[2]);
+  masterBearing = getBearing(compass->getValues()[0], compass->getValues()[2], 0);
 
 } // end of gotoPurpleMat function
 
@@ -1092,7 +1094,7 @@ void placeInHole(int objectID){
     cout << "Cylinder" << endl;;
     stopDist = 300;
   }
-  double currentBearing = getBearing(compass->getValues()[0], compass->getValues()[2]); // this is the current bearing
+  double currentBearing = getBearing(compass->getValues()[0], compass->getValues()[2], 0); // this is the current bearing
   double roatational_angle = 180 - (currentBearing - masterBearing);
 
   if (roatational_angle >= 360){
@@ -1305,7 +1307,7 @@ void mossaicAreaFunction()
   turnArm(150);
 
 
-  double currentBearing = getBearing(compass->getValues()[0], compass->getValues()[2]); // this is the current bearing
+  double currentBearing = getBearing(compass->getValues()[0], compass->getValues()[2], 0); // this is the current bearing
   double roatational_angle = 180 - (currentBearing - masterBearing);
 
   if (roatational_angle >= 360){
@@ -1444,14 +1446,21 @@ void slide(bool reverse, bool ball)
 
   float END_POS;
   if (ball) END_POS = 0.025;
-  else END_POS = 0.020;
+  else END_POS = 0.019;
 
   base1Mot->setVelocity(0.04); //done
   base2Mot->setVelocity(0.04);
 
   if(reverse){
-    base1Mot -> setPosition(END_POS); //done
-    base2Mot -> setPosition(-END_POS);
+
+    if(ball){
+      base1Mot -> setPosition(-0.02); //done
+      base2Mot -> setPosition(0.02);
+    }else{
+      base1Mot -> setPosition(0.01); //done
+      base2Mot -> setPosition(-0.01);
+    }
+
   }else{
     base1Mot -> setPosition(-END_POS); //done
     base2Mot -> setPosition(END_POS);
@@ -1864,18 +1873,6 @@ void Line_follow()
   }
 }
 
-// maze solving
-int moveForwardMaze(float speed){
-
-  // NOTE: Here speed is a fraction. It implies the fraction of maximum speed
-
-  // setting the motor speed
-  motors[0] -> setVelocity(speed * NOM_SPEED_MAZE);
-  motors[1] -> setVelocity(speed * NOM_SPEED_MAZE);
-
-  return 0;
-}// end of moveForward function
-
 int move_forward_for_sometime(int count) // *********************************/////////////*
 {   
     //stepsForBearingCorrection = 0;//start the session of supervising the wall distances
@@ -1970,56 +1967,13 @@ int move_forward_for_sometime(int count) // *********************************///
 
 }
 
-void turnRobotMaze(float angle){
-
-
-  // reading compass direction
-  double x = compass -> getValues()[0];
-  double z = compass -> getValues()[2];
-  
-  double start_location = getBearing(x, z);
-  
-  double end_location = start_location + angle;
-  double diff {};
-  double I{};
-
-  // if (end_location < 0) {end_location += 360; status = true;}
-  // if (end_location > 360) {end_location -= 360; status = true;}
-  if (end_location < 0) {end_location += 360;}
-  if (end_location > 360) {end_location -= 360;}
-
-  motors[0] -> setVelocity( (angle / abs(angle)) *  -0.4 * NOM_SPEED_MAZE);
-  motors[1] -> setVelocity( (angle / abs(angle)) * 0.4 * NOM_SPEED_MAZE);
-
-  while (robot->step(timeStep) != -1){
-   
-    x = compass -> getValues()[0];
-    z = compass -> getValues()[2];
-
-    bearing = getBearing(x,z);
-
-    diff = abs(bearing - start_location);
-    if (diff > 2.27198) diff = 2.27198;
-
-    I += diff;
-    if(I > abs(angle)) {
-      motors[0] -> setVelocity(0);
-      motors[1] -> setVelocity(0);
-      break;
-    }
-    start_location = bearing;
-  }// end of while loop
-turnInProcess = 0;
-}
-// end of turning
-
 void maze_solving_sub_task()
 {
 
   //initaializing all the distance sensors
   double max_distance_reading = 4000*10;//r3ki3g problametic
 
-  int forwardAmountBeforeATurn = 140; //::changes due to momentum=>(MAX_SPEED_MAZE,thisValues) = (8,65) ,(9,60) (10,50);
+  int forwardAmountBeforeATurn = 120; //::changes due to momentum=>(MAX_SPEED_MAZE,thisValues) = (8,65) ,(9,60) (10,50);
 
 
   bool isMazeSolvingOver=0;
@@ -2078,8 +2032,8 @@ void maze_solving_sub_task()
          //go for perfect front distance
           
         move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
-        cout << "\tmffst ended"<<endl;
-        turnRobotMaze(90);
+        cout << "\tMoving forvard for some time ended"<<endl;
+        turnRobot(-90);
         move_forward_for_sometime(50*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25||| -->30
      }
 
@@ -2090,7 +2044,7 @@ void maze_solving_sub_task()
      if (!turnInProcess)
      {
      //leftWallDistancesForbearingCorrection
-     cout << "\tgo straight + see if needed to correct the bearing"<<endl;
+     cout << "\tgo straight + see if needed to self correct"<<endl;
      move_forward_for_sometime(8);//10 is the best:r3ki3g::10-->5
      }
    }
@@ -2103,7 +2057,7 @@ void maze_solving_sub_task()
        cout << "\tSensobot -> turn right"<<endl;
        //move_forward_until_perfect_front_distance_for_turning();***************do it here tooo
        move_forward_for_sometime(forwardAmountBeforeATurn*4/MAX_SPEED_MAZE);
-       turnRobotMaze(-90);
+       turnRobot(90);
        move_forward_for_sometime(50*4/MAX_SPEED_MAZE);//r3ki3g::30-->35-->25||| -->30
        }
    }
@@ -2115,12 +2069,12 @@ void maze_solving_sub_task()
                  
          if (left_distance >right_distance)
          { // there are more space in left -- so rotate left - wise
-         turnRobotMaze(180);
+         turnRobot(-180);
          }
          else
          {
          //robot is in middle or more space in right side -- so rotate right- wise
-         turnRobotMaze(-180);
+         turnRobot(180);
          }
           r3ki3gBiasSign*=-1;
           move_forward_for_sometime(50*4/MAX_SPEED_MAZE);//||| -->35
@@ -2135,5 +2089,3 @@ void maze_solving_sub_task()
   
  
 }
-
-
